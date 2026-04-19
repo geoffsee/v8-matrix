@@ -1,7 +1,8 @@
-[package]
-name = "v8-matrix"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-v8 = "130.0.2"
+[workspace]
+members = [
+    "crates/*",
+    "crates/examples/*",
+]
+exclude = [
+    "crates/examples",
+]
