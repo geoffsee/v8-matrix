@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+echo "Building wasm server..."
+cargo build -p v8-matrix-wasm-server --quiet
+
+echo "Building wasip2-showcase..."
+cd "$ROOT/crates/examples/wasip2-showcase" && cargo build --release --quiet && cd "$ROOT"
+
+echo "Building wasip2-udp-pingpong..."
+cd "$ROOT/crates/examples/wasip2-udp-pingpong" && cargo build --release --quiet && cd "$ROOT"
+
+echo
+echo "http://localhost:3000"
+echo
+exec "$ROOT/target/debug/v8-matrix-wasm-server"

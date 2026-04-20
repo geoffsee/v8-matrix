@@ -10,3 +10,5 @@ crate-type = ["cdylib", "rlib"]
 v8 = "130.0.2"
 wasmtime = { version = "29", features = ["component-model"] }
 wasmtime-wasi = "29"
+bytes = "1"
+async-trait = "0.1"

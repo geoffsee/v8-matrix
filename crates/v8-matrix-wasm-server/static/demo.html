@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v8-matrix</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #c9d1d9; --bright: #e6edf3; --dim: #8b949e;
+    --accent: #58a6ff; --green: #3fb950; --yellow: #d29922; --red: #f85149;
+    --cyan: #39d2e0; --purple: #bc8cff;
+    --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--mono); background: var(--bg); color: var(--text);
+    height: 100vh; display: flex; flex-direction: column;
+  }
+  #header {
+    padding: 12px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: baseline; gap: 12px;
+    background: var(--surface);
+  }
+  #header h1 { font-size: 0.85rem; color: var(--accent); font-weight: 700; }
+  #header span { font-size: 0.7rem; color: var(--dim); }
+  #terminal {
+    flex: 1; overflow-y: auto; padding: 16px 20px;
+    font-size: 0.82rem; line-height: 1.55;
+  }
+  .line { white-space: pre-wrap; word-break: break-all; }
+  .prompt-color { color: var(--accent); }
+  .stdout { color: var(--bright); }
+  .stream { color: var(--green); }
+  .stderr { color: var(--dim); font-size: 0.75rem; }
+  .metrics { color: var(--purple); font-size: 0.72rem; }
+  .error { color: var(--red); }
+  .system { color: var(--yellow); }
+  .muted { color: var(--dim); }
+  #input-row {
+    padding: 10px 20px; border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: 0;
+    background: var(--surface);
+  }
+  #input-row .prompt { color: var(--accent); margin-right: 8px; }
+  #input-row input {
+    flex: 1; background: none; border: none; outline: none;
+    color: var(--bright); font-family: var(--mono); font-size: 0.82rem;
+    caret-color: var(--accent);
+  }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>v8-matrix</h1>
+  <span>wasi preview 2 shell &middot; each command runs inside a sandboxed wasm component</span>
+</div>
+
+<div id="terminal" tabindex="-1"></div>
+
+<div id="input-row">
+  <span class="prompt">&gt;</span>
+  <input id="input" type="text" placeholder="help" autofocus autocomplete="off" spellcheck="false">
+</div>
+
+<script>
+const terminal = document.getElementById('terminal');
+const input = document.getElementById('input');
+const history = [];
+let histIdx = -1;
+let activeStream = null; // EventSource for streaming commands
+
+const STREAMING_CMDS = ['flood'];
+
+function add(cls, text) {
+  const el = document.createElement('div');
+  el.className = 'line ' + cls;
+  el.textContent = text;
+  terminal.appendChild(el);
+}
+
+function addHtml(cls, html) {
+  const el = document.createElement('div');
+  el.className = 'line ' + cls;
+  el.innerHTML = html;
+  terminal.appendChild(el);
+}
+
+function scroll() { terminal.scrollTop = terminal.scrollHeight; }
+
+function esc(s) {
+  const d = document.createElement('span');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function fmtUs(us) {
+  if (us >= 1000000) return (us / 1000000).toFixed(1) + 's';
+  if (us >= 1000) return (us / 1000).toFixed(1) + 'ms';
+  return us + 'us';
+}
+
+function fmtBytes(b) {
+  if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+  if (b >= 1024) return (b / 1024).toFixed(1) + ' KB';
+  return b + ' B';
+}
+
+function stopStream() {
+  if (activeStream) {
+    activeStream.close();
+    activeStream = null;
+    add('system', '^C');
+    add('', '');
+    scroll();
+    input.disabled = false;
+    input.placeholder = 'help';
+    input.focus();
+  }
+}
+
+function startStream(cmd) {
+  input.disabled = true;
+  input.placeholder = 'ctrl+c to stop';
+
+  const es = new EventSource('/exec/stream?cmd=' + encodeURIComponent(cmd));
+  activeStream = es;
+
+  es.onmessage = (e) => {
+    add('stream', e.data);
+    scroll();
+  };
+
+  es.onerror = () => {
+    es.close();
+    if (activeStream === es) {
+      activeStream = null;
+      add('muted', '(stream ended)');
+      add('', '');
+      scroll();
+      input.disabled = false;
+      input.placeholder = 'help';
+      input.focus();
+    }
+  };
+}
+
+// Welcome
+add('system', 'wasi preview 2 interactive shell');
+add('muted', 'commands run as wasm components with wasi:cli, wasi:clocks, wasi:random, wasi:sockets, wasi:filesystem');
+add('muted', 'type "help" to see available commands\n');
+scroll();
+
+input.addEventListener('keydown', async (e) => {
+  // Ctrl+C stops streaming
+  if (e.key === 'c' && e.ctrlKey) {
+    e.preventDefault();
+    stopStream();
+    return;
+  }
+
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (histIdx < history.length - 1) { histIdx++; input.value = history[history.length - 1 - histIdx]; }
+    return;
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (histIdx > 0) { histIdx--; input.value = history[history.length - 1 - histIdx]; }
+    else { histIdx = -1; input.value = ''; }
+    return;
+  }
+  if (e.key !== 'Enter') return;
+  if (activeStream) return;
+
+  const cmd = input.value.trim();
+  if (!cmd) return;
+
+  history.push(cmd);
+  histIdx = -1;
+  input.value = '';
+
+  addHtml('', '<span class="prompt-color">&gt;</span> ' + esc(cmd));
+  scroll();
+
+  // Check if this is a streaming command
+  const baseCmd = cmd.split(/\s+/)[0];
+  if (STREAMING_CMDS.includes(baseCmd)) {
+    startStream(cmd);
+    return;
+  }
+
+  // Regular command
+  input.disabled = true;
+
+  try {
+    const t0 = performance.now();
+    const resp = await fetch('/exec?cmd=' + encodeURIComponent(cmd));
+    const data = await resp.json();
+    const httpMs = (performance.now() - t0).toFixed(1);
+
+    if (data.error) {
+      add('error', data.error);
+    } else {
+      const stdout = data.stdout.trimEnd();
+      const stderr = data.stderr.trimEnd();
+      const m = data.metrics;
+
+      if (stdout) add('stdout', stdout);
+      if (stderr) add('stderr', stderr);
+
+      const parts = [
+        'compile ' + fmtUs(m.compile_us),
+        'run ' + fmtUs(m.run_us),
+        'total ' + fmtUs(m.total_us),
+        'http ' + httpMs + 'ms',
+        fmtBytes(m.wasm_size_bytes) + ' wasm',
+      ];
+      add('metrics', parts.join('  ·  '));
+    }
+  } catch (err) {
+    add('error', 'request failed: ' + err.message);
+  }
+
+  add('', '');
+  scroll();
+  input.disabled = false;
+  input.focus();
+});
+
+// Also handle Ctrl+C on the document level
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'c' && e.ctrlKey && activeStream) {
+    e.preventDefault();
+    stopStream();
+  }
+});
+
+terminal.addEventListener('click', () => input.focus());
+</script>
+</body>
+</html>
