@@ -1,0 +1,12 @@
+{
+  "name": "v8-matrix",
+  "private": true,
+  "scripts": {
+    "dev": "bash ./scripts/dev",
+    "client:install": "npm --prefix client install",
+    "client:build": "npm --prefix client run build",
+    "client:dev": "npm --prefix client run dev",
+    "client:watch": "npm --prefix client run build -- --watch",
+    "web-demo": "bash ./scripts/dev"
+  }
+}

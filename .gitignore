@@ -1,4 +1,12 @@
 /.idea/
-target/
-/node_modules/
+target
+dist
+node_modules
 v8-matrix.iml
+/acme_cache/
+/.playwright-mcp/
+/.claude/
+/fly.toml
+/Dockerfile
+/crates/v8-matrix-wasm-server/static/assets/main.*.js
+/crates/v8-matrix-wasm-server/static/assets/main.*.css

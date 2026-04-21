@@ -3,6 +3,13 @@ use std::sync::Once;
 use bytes::Bytes;
 use wasmtime_wasi::{HostOutputStream, StdoutStream, StreamResult};
 
+pub mod js_runtime;
+
+pub use js_runtime::{
+    BindingValue, FetcherConfig, FetcherMetrics, FetcherResult, JsRequest, JsResponse,
+    ResourceLimits, execute_fetcher,
+};
+
 static V8_INIT: Once = Once::new();
 
 /// Initialize V8 (safe to call multiple times).

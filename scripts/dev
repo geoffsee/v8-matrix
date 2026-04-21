@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+echo "Building React client bundle..."
+if [ ! -d "$ROOT/client/node_modules" ]; then
+  npm --prefix "$ROOT/client" install
+fi
+npm --prefix "$ROOT/client" run build --silent
 
 echo "Building wasm server..."
 cargo build -p v8-matrix-wasm-server --quiet

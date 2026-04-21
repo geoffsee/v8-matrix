@@ -7,18 +7,20 @@ Includes a browser-based terminal UI where every command you type is a new WASM 
 ## Architecture
 
 ```
-browser (demo.html)
+browser (React bundle built with Rspack)
   |
-  |  HTTP / SSE
+  |  HTTP/JSON (:3000)      — one-shot commands
+  |  SSE (:3000)            — streaming fallback
+  |  WebTransport (:4433)   — flood via QUIC datagrams (UDP end-to-end)
   v
-axum server (v8-matrix-wasm-server)
+axum + h3/quinn server (v8-matrix-wasm-server)
   |
   |  WasmConfig { bytes, args, env, network, preopens }
   v
 v8-matrix lib
   |
   |-- execute_wasm()            buffered run, returns stdout + stderr + metrics
-  |-- execute_wasm_streaming()  SSE via channel-based stdout, epoch cancellation
+  |-- execute_wasm_streaming()  channel-based stdout, epoch cancellation
   |-- execute_js()              V8 isolate for raw JavaScript
   v
 wasmtime (component model, WASI P2)
@@ -27,14 +29,22 @@ wasmtime (component model, WASI P2)
 ## Quick Start
 
 ```sh
-# Prerequisites: Rust nightly, wasm32-wasip2 target
+# Prerequisites: Rust, wasm32-wasip2 target
 rustup target add wasm32-wasip2
 
 # Build everything and start the server
 ./web-demo.sh
-
-# Open http://localhost:3000
 ```
+
+The server prints a Chrome launch command with the SPKI fingerprint for the self-signed cert:
+```
+open -na 'Google Chrome' --args \
+  --origin-to-force-quic-on=127.0.0.1:4433 \
+  --ignore-certificate-errors-spki-list=<hash> \
+  http://localhost:3000
+```
+
+Without Chrome flags, `flood` falls back to SSE automatically.
 
 ## Shell Commands
 
@@ -92,11 +102,12 @@ State commands (`set`/`get`/`del`/`keys`/`history`) persist across invocations v
 ```
 crates/
   v8-matrix/                    Core library (V8 + wasmtime + WASI P2)
-  v8-matrix-wasm-server/        Axum HTTP server + demo.html
+  v8-matrix-wasm-server/        Axum HTTP server + static bundle serving
   examples/
     hello-wasm/                 Minimal wasip2 hello world
     wasip2-showcase/            Exercises all WASI P2 interfaces
     wasip2-udp-pingpong/        Interactive shell component (the one behind /exec)
+client/                         React app source + Rspack build config
 ```
 
 ### v8-matrix (lib)
